@@ -21,6 +21,7 @@
 #define MAXJOBS 20        // background jobs remembered by "jobs"
 #define PROMPT "FCIT> "
 #define HISTORY_SIZE 20   // how many recent commands are remembered
+#define MAX_BLOCK 50      // lines in the "then" part (and in the "else" part) of an if
 
 // One simple command of a pipeline, e.g. for  "sort < in.txt | head > out.txt"
 // there are two:  {argv = sort, infile = in.txt}  and  {argv = head, outfile = out.txt}
@@ -29,6 +30,8 @@ typedef struct {
     char* infile;              // file after "<" (NULL = keyboard / previous pipe)
     char* outfile;             // file after ">" (NULL = screen / next pipe)
 } command_t;
+
+extern int last_status;   // exit status of the last command (0 = success), defined in main.c
 
 // Function prototypes
 char** tokenize(char* cmdline);

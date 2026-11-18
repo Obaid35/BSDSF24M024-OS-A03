@@ -213,7 +213,9 @@ int parse_pipeline(char** tokens, command_t cmds[]) {
 // ---------------- built-in commands ----------------
 // Runs a built-in command inside the shell process.
 // Returns 1 if arglist[0] is a built-in (it has been executed), 0 otherwise.
+// A built-in's own exit status (0 = success) is put in last_status.
 int handle_builtin(char** arglist) {
+    last_status = 0;
     if (strcmp(arglist[0], "exit") == 0) {
         int code = (arglist[1] != NULL) ? atoi(arglist[1]) : 0;
         printf("Shell exited.\n");
@@ -225,8 +227,10 @@ int handle_builtin(char** arglist) {
         if (dir == NULL) dir = getenv("HOME");   // plain "cd" goes to the home directory
         if (dir == NULL) {
             fprintf(stderr, "cd: HOME not set\n");
+            last_status = 1;
         } else if (chdir(dir) == -1) {           // chdir() changes the cwd of THIS process
             perror("cd");
+            last_status = 1;                     // failure, e.g. for "if cd /nowhere"
         }
         return 1;
     }
@@ -237,6 +241,7 @@ int handle_builtin(char** arglist) {
         printf("  exit [n]   leave the shell\n");
         printf("  help       show this message\n");
         printf("  history    show the last %d commands (!n re-runs command n)\n", HISTORY_SIZE);
+        printf("  if cmd     then ... else ... fi, on separate lines (else is optional)\n");
         printf("  jobs       list background jobs (start one with: command &)\n");
         return 1;
     }

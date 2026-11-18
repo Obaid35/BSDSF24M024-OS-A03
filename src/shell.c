@@ -32,7 +32,7 @@ static void show_history(void) {
 // ---------------- Tab completion (GNU Readline) ----------------
 // The line itself is now read by readline() in main.c (read_cmd() is no longer needed).
 
-static char* builtin_names[] = { "cd", "exit", "help", "history", "jobs", NULL };
+static char* builtin_names[] = { "cd", "exit", "help", "history", "jobs", "set", NULL };
 
 // Readline calls this again and again for ONE word: state == 0 on the first call,
 // then 1, 2, 3 ... It must return one matching name (malloc'd) per call, and NULL when done.
@@ -210,12 +210,104 @@ int parse_pipeline(char** tokens, command_t cmds[]) {
     return ncmds + 1;
 }
 
+// ---------------- shell variables ----------------
+// A linked list of NAME=value pairs. New variables are added at the end, so "set"
+// prints them in the order they were made.
+typedef struct var {
+    char* name;
+    char* value;
+    struct var* next;
+} var_t;
+
+static var_t* var_head = NULL;
+
+static void set_var(const char* name, const char* value) {
+    var_t* v;
+    for (v = var_head; v != NULL; v = v->next) {
+        if (strcmp(v->name, name) == 0) {      // already exists: replace its value
+            free(v->value);
+            v->value = strdup(value);
+            return;
+        }
+    }
+    var_t* node = malloc(sizeof(var_t));       // new variable
+    node->name = strdup(name);
+    node->value = strdup(value);
+    node->next = NULL;
+    if (var_head == NULL) {
+        var_head = node;
+    } else {
+        for (v = var_head; v->next != NULL; v = v->next)
+            ;                                  // walk to the last node
+        v->next = node;
+    }
+}
+
+static const char* get_var(const char* name) {
+    for (var_t* v = var_head; v != NULL; v = v->next)
+        if (strcmp(v->name, name) == 0)
+            return v->value;
+    return NULL;
+}
+
+static void print_vars(void) {
+    for (var_t* v = var_head; v != NULL; v = v->next)
+        printf("%s=%s\n", v->name, v->value);
+}
+
+// "NAME=value": NAME starts with a letter or '_', then letters, digits or '_', then '='.
+static int is_assignment(const char* word) {
+    if (!(isalpha((unsigned char)word[0]) || word[0] == '_'))
+        return 0;
+    int i = 1;
+    while (isalnum((unsigned char)word[i]) || word[i] == '_')
+        i++;
+    return word[i] == '=';
+}
+
+// If *word is "$NAME", replace it (in place) with the variable's value.
+// Looks in our variables first, then in the environment ($HOME, $PATH ...).
+// "$?" gives the exit status of the last command. An unknown variable becomes "".
+void expand_variable(char** word) {
+    char* w = *word;
+    if (w[0] != '$' || w[1] == '\0')
+        return;                                // not a variable (a lone "$" stays "$")
+
+    char number[16];
+    const char* value;
+    if (strcmp(w, "$?") == 0) {
+        snprintf(number, sizeof(number), "%d", last_status);
+        value = number;
+    } else {
+        value = get_var(w + 1);
+        if (value == NULL) value = getenv(w + 1);
+        if (value == NULL) value = "";
+    }
+    *word = strdup(value);                     // new memory for the expanded word
+    free(w);                                   // the old "$NAME" string is not needed
+}
+
 // ---------------- built-in commands ----------------
 // Runs a built-in command inside the shell process.
 // Returns 1 if arglist[0] is a built-in (it has been executed), 0 otherwise.
 // A built-in's own exit status (0 = success) is put in last_status.
 int handle_builtin(char** arglist) {
     last_status = 0;
+
+    // NAME=value (alone on the line) is a variable assignment: stored, no fork.
+    if (arglist[1] == NULL && is_assignment(arglist[0])) {
+        char* eq = strchr(arglist[0], '=');
+        *eq = '\0';                            // split "NAME=value" into "NAME" and "value"
+        set_var(arglist[0], eq + 1);
+        *eq = '=';
+        return 1;
+    }
+
+    if (strcmp(arglist[0], "set") == 0) {
+        print_vars();
+        return 1;
+    }
+
     if (strcmp(arglist[0], "exit") == 0) {
         int code = (arglist[1] != NULL) ? atoi(arglist[1]) : 0;
         printf("Shell exited.\n");

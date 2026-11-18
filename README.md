@@ -28,3 +28,4 @@ make clean      # removes obj/*.o and bin/myshell
 | v5 | I/O redirection `<` `>` and pipes `\|` (also more than one pipe, and quotes "..." in words) |
 | v6 | Command chaining `;`, background jobs `&`, zombie reaping with `waitpid(WNOHANG)`, real `jobs` |
 | v7 | `if ... then ... else ... fi` control structure (decided by the exit status of a command) |
+| v8 | Shell variables: `NAME=value`, `$NAME` expansion, `set` |

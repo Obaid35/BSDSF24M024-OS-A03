@@ -10,6 +10,7 @@
 #include <sys/wait.h>
 #include <errno.h>
 #include <dirent.h>
+#include <ctype.h>               // isalpha(), isalnum() for variable names
 #include <signal.h>              // signal(), SIGINT, SIGQUIT
 #include <readline/readline.h>   // readline(): prompt + line editing + Tab completion
 #include <readline/history.h>    // add_history(): Up/Down arrow history
@@ -44,5 +45,6 @@ int handle_builtin(char** arglist);   // returns 1 if arglist[0] was a built-in 
 void add_to_history(const char* cmdline);
 char* get_history(int n);             // copy of command number n, or NULL if n is out of range
 void init_completion(void);           // tell readline how to complete words on Tab
+void expand_variable(char** word);    // "$NAME" -> its value (the string is replaced)
 
 #endif // SHELL_H

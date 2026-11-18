@@ -40,7 +40,10 @@ static int run_line(char** tokens) {
                 return last_status;
             n = 0;                             // start the next part
         } else {
-            seg[n++] = tok;
+            // "$NAME" -> value. Done here, just before this part runs, so that in
+            // "X=5 ; echo $X" the assignment has already happened when $X is expanded.
+            expand_variable(&tokens[i]);
+            seg[n++] = tokens[i];
         }
     }
 }

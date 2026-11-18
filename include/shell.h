@@ -11,12 +11,12 @@
 
 #define MAX_LEN 512
 #define MAXARGS 10
-#define ARGLEN 30
 #define PROMPT "FCIT> "
 
 // Function prototypes
 char* read_cmd(char* prompt, FILE* fp);
 char** tokenize(char* cmdline);
 int execute(char** arglist);
+int handle_builtin(char** arglist);   // returns 1 if arglist[0] was a built-in (and ran it), else 0
 
 #endif // SHELL_H

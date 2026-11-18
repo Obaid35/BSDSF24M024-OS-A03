@@ -7,7 +7,7 @@
 
 CC      = gcc
 CFLAGS  = -Wall -Wextra -Iinclude
-LDFLAGS =
+LDFLAGS = -lreadline
 SRCS    = $(wildcard src/*.c)
 OBJS    = $(patsubst src/%.c, obj/%.o, $(SRCS))
 TARGET  = bin/myshell

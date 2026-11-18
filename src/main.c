@@ -4,7 +4,11 @@ int main() {
     char* cmdline;
     char** arglist;
 
-    while ((cmdline = read_cmd(PROMPT, stdin)) != NULL) {
+    init_completion();
+
+    // readline() prints the prompt, lets the user edit the line, and returns it in
+    // malloc'd memory. It returns NULL on Ctrl+D (end of input).
+    while ((cmdline = readline(PROMPT)) != NULL) {
         // "!n" -> replace the line with command number n from the history,
         // BEFORE it is tokenized or stored in the history.
         if (cmdline[0] == '!') {
@@ -20,7 +24,11 @@ int main() {
             fflush(stdout);
         }
 
-        add_to_history(cmdline);
+        // Store only non-empty lines: in readline's list (Up/Down arrows) and in ours (history, !n).
+        if (cmdline[strspn(cmdline, " \t")] != '\0') {
+            add_history(cmdline);
+            add_to_history(cmdline);
+        }
 
         if ((arglist = tokenize(cmdline)) != NULL) {
             // Built-ins (cd, exit, help, jobs, history) run inside the shell itself.

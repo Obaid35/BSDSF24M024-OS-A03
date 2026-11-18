@@ -29,28 +29,69 @@ static void show_history(void) {
         printf("%5d  %s\n", n, history[(n - 1) % HISTORY_SIZE]);
 }
 
-// ---------------- reading and tokenizing ----------------
-char* read_cmd(char* prompt, FILE* fp) {
-    printf("%s", prompt);
-    fflush(stdout);   // show the prompt now; an unflushed buffer would also be copied into every forked child
-    char* cmdline = (char*) malloc(sizeof(char) * MAX_LEN);
-    int c, pos = 0;
+// ---------------- Tab completion (GNU Readline) ----------------
+// The line itself is now read by readline() in main.c (read_cmd() is no longer needed).
 
-    while ((c = getc(fp)) != EOF) {
-        if (c == '\n') break;
-        if (pos < MAX_LEN - 1)          // never write past the buffer
-            cmdline[pos++] = c;
+static char* builtin_names[] = { "cd", "exit", "help", "history", "jobs", NULL };
+
+// Readline calls this again and again for ONE word: state == 0 on the first call,
+// then 1, 2, 3 ... It must return one matching name (malloc'd) per call, and NULL when done.
+// Matches are the built-in names first, then the programs in every directory of $PATH.
+static char* command_generator(const char* text, int state) {
+    static int builtin_index;
+    static size_t len;
+    static char* path_copy = NULL;   // our own copy of $PATH, cut into pieces by strtok_r()
+    static char* saveptr;
+    static char* dir_name;           // the PATH directory being searched now
+    static DIR* dirp = NULL;
+    struct dirent* entry;
+
+    if (state == 0) {                // a new word: start from the beginning
+        builtin_index = 0;
+        len = strlen(text);
+        if (dirp != NULL) { closedir(dirp); dirp = NULL; }
+        free(path_copy);
+        path_copy = getenv("PATH") ? strdup(getenv("PATH")) : NULL;
+        dir_name = path_copy ? strtok_r(path_copy, ":", &saveptr) : NULL;
     }
 
-    if (c == EOF && pos == 0) {
-        free(cmdline);
-        return NULL; // Handle Ctrl+D
+    // 1. built-in command names
+    while (builtin_names[builtin_index] != NULL) {
+        const char* name = builtin_names[builtin_index++];
+        if (strncmp(name, text, len) == 0)
+            return strdup(name);
     }
 
-    cmdline[pos] = '\0';
-    return cmdline;
+    // 2. file names in each PATH directory (e.g. /usr/bin), one directory at a time
+    while (dir_name != NULL) {
+        if (dirp == NULL)
+            dirp = opendir(dir_name);
+        if (dirp != NULL) {
+            while ((entry = readdir(dirp)) != NULL) {
+                if (entry->d_name[0] != '.' && strncmp(entry->d_name, text, len) == 0)
+                    return strdup(entry->d_name);    // the next call continues from here
+            }
+            closedir(dirp);
+            dirp = NULL;
+        }
+        dir_name = strtok_r(NULL, ":", &saveptr);    // move to the next PATH directory
+    }
+    return NULL;                     // no more matches
 }
 
+// Called by readline when Tab is pressed. start = position of the word in the line.
+static char** shell_completion(const char* text, int start, int end) {
+    (void)end;
+    if (start == 0)                  // first word of the line -> complete a command name
+        return rl_completion_matches(text, command_generator);
+    return NULL;                     // any other word -> readline's default: file names
+}
+
+void init_completion(void) {
+    rl_attempted_completion_function = shell_completion;
+}
+
+// ---------------- tokenizing ----------------
 char** tokenize(char* cmdline) {
     // Edge case: empty command line
     if (cmdline == NULL || cmdline[0] == '\0' || cmdline[0] == '\n') {

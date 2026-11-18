@@ -335,6 +335,8 @@ int handle_builtin(char** arglist) {
         printf("  history    show the last %d commands (!n re-runs command n)\n", HISTORY_SIZE);
         printf("  if cmd     then ... else ... fi, on separate lines (else is optional)\n");
         printf("  jobs       list background jobs (start one with: command &)\n");
+        printf("  set        list all shell variables\n");
+        printf("  NAME=value create or change a variable; use it as $NAME\n");
         return 1;
     }
 

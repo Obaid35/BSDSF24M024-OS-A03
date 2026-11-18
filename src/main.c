@@ -2,7 +2,8 @@
 
 int main() {
     char* cmdline;
-    char** arglist;
+    char** tokens;
+    command_t cmds[MAXCMDS];
 
     init_completion();
 
@@ -30,18 +31,15 @@ int main() {
             add_to_history(cmdline);
         }
 
-        if ((arglist = tokenize(cmdline)) != NULL) {
-            // Built-ins (cd, exit, help, jobs, history) run inside the shell itself.
-            // Only if it is NOT a built-in do we fork a child with execute().
-            if (handle_builtin(arglist) == 0) {
-                execute(arglist);
-            }
+        if ((tokens = tokenize(cmdline)) != NULL) {
+            int ncmds = parse_pipeline(tokens, cmds);   // -1 = syntax error (already printed)
 
-            // Free the memory allocated by tokenize()
-            for (int i = 0; arglist[i] != NULL; i++) {
-                free(arglist[i]);
+            // A single command may be a built-in (cd, exit, ...): it runs inside the shell.
+            // Everything else (external commands, pipelines) runs in child processes.
+            if (ncmds > 0 && !(ncmds == 1 && handle_builtin(cmds[0].argv))) {
+                execute(cmds, ncmds);
             }
-            free(arglist);
+            free_tokens(tokens);
         }
         free(cmdline);
     }

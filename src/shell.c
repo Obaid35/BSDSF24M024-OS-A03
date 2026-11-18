@@ -91,44 +91,122 @@ void init_completion(void) {
     rl_attempted_completion_function = shell_completion;
 }
 
-// ---------------- tokenizing ----------------
+// ---------------- tokenizing and parsing ----------------
+
+// characters that are a token of their own even without spaces: "ls>out" = ls  >  out
+static int is_special(char c) {
+    return c == '<' || c == '>' || c == '|';
+}
+
+static int is_operator(const char* tok) {
+    return strcmp(tok, "<") == 0 || strcmp(tok, ">") == 0 || strcmp(tok, "|") == 0;
+}
+
+// Splits the line into words and operators. Text inside "..." or '...' stays one word
+// (the quotes are removed), so  grep "hello world" f.txt  gives 3 tokens.
+// Returns a NULL-terminated array of malloc'd strings, or NULL if the line has no tokens.
 char** tokenize(char* cmdline) {
-    // Edge case: empty command line
-    if (cmdline == NULL || cmdline[0] == '\0' || cmdline[0] == '\n') {
-        return NULL;
-    }
-
-    char** arglist = (char**)malloc(sizeof(char*) * (MAXARGS + 1));
-
+    char** tokens = malloc(sizeof(char*) * (MAXTOKENS + 1));
+    char word[MAX_LEN];
+    int ntok = 0;
     char* cp = cmdline;
-    char* start;
-    int len;
-    int argnum = 0;
 
-    while (*cp != '\0' && argnum < MAXARGS) {
-        while (*cp == ' ' || *cp == '\t') cp++; // Skip leading whitespace
-
-        if (*cp == '\0') break; // Line was only whitespace
-
-        start = cp;
-        len = 1;
-        while (*++cp != '\0' && !(*cp == ' ' || *cp == '\t')) {
-            len++;
+    while (*cp != '\0') {
+        while (*cp == ' ' || *cp == '\t') cp++;        // skip spaces between tokens
+        if (*cp == '\0') break;
+        if (ntok == MAXTOKENS) {
+            fprintf(stderr, "myshell: too many words, the rest is ignored\n");
+            break;
         }
-        // allocate exactly len+1 bytes, so a long word (e.g. a long path) cannot overflow
-        arglist[argnum] = (char*)malloc(len + 1);
-        strncpy(arglist[argnum], start, len);
-        arglist[argnum][len] = '\0';
-        argnum++;
+
+        int len = 0;
+        if (is_special(*cp)) {                         // an operator: < > |
+            word[len++] = *cp++;
+        } else {                                       // a normal word
+            char quote = 0;                            // 0, or the quote we are inside
+            while (*cp != '\0') {
+                if (quote != 0) {
+                    if (*cp == quote) quote = 0;       // closing quote: not copied
+                    else if (len < MAX_LEN - 1) word[len++] = *cp;
+                } else if (*cp == '"' || *cp == '\'') {
+                    quote = *cp;                       // opening quote: not copied
+                } else if (*cp == ' ' || *cp == '\t' || is_special(*cp)) {
+                    break;                             // end of this word
+                } else if (len < MAX_LEN - 1) {
+                    word[len++] = *cp;
+                }
+                cp++;
+            }
+        }
+        word[len] = '\0';
+        tokens[ntok++] = strdup(word);
     }
 
-    if (argnum == 0) { // No arguments were parsed
-        free(arglist);
+    if (ntok == 0) {                                   // empty line or only spaces
+        free(tokens);
         return NULL;
     }
+    tokens[ntok] = NULL;
+    return tokens;
+}
 
-    arglist[argnum] = NULL;
-    return arglist;
+void free_tokens(char** tokens) {
+    for (int i = 0; tokens[i] != NULL; i++)
+        free(tokens[i]);
+    free(tokens);
+}
+
+// Turns the tokens into an array of commands separated by "|".
+// "<" and ">" take the next token as a file name. The argv pointers point INTO tokens,
+// so nothing new is allocated (free_tokens() frees everything later).
+// Returns the number of commands, or -1 after printing a syntax error.
+int parse_pipeline(char** tokens, command_t cmds[]) {
+    int ncmds = 0;     // commands finished so far
+    int argc = 0;      // words in the current command
+    command_t* cmd = &cmds[0];
+    memset(cmd, 0, sizeof(command_t));                 // argv[] all NULL, no files
+
+    for (int i = 0; tokens[i] != NULL; i++) {
+        char* tok = tokens[i];
+
+        if (strcmp(tok, "|") == 0) {
+            if (argc == 0) {
+                fprintf(stderr, "myshell: syntax error near '|'\n");
+                return -1;
+            }
+            cmd->argv[argc] = NULL;                    // finish this command
+            ncmds++;
+            if (ncmds == MAXCMDS) {
+                fprintf(stderr, "myshell: too many commands in the pipeline\n");
+                return -1;
+            }
+            cmd = &cmds[ncmds];                        // start the next command
+            memset(cmd, 0, sizeof(command_t));
+            argc = 0;
+        } else if (strcmp(tok, "<") == 0 || strcmp(tok, ">") == 0) {
+            char* file = tokens[i + 1];
+            if (file == NULL || is_operator(file)) {
+                fprintf(stderr, "myshell: syntax error: file name missing after '%s'\n", tok);
+                return -1;
+            }
+            if (tok[0] == '<') cmd->infile = file;
+            else               cmd->outfile = file;
+            i++;                                       // the file name is used, skip it
+        } else {
+            if (argc == MAXARGS) {
+                fprintf(stderr, "myshell: too many arguments\n");
+                return -1;
+            }
+            cmd->argv[argc++] = tok;
+        }
+    }
+
+    if (argc == 0) {                                   // e.g. "ls |"  or  "> out.txt"
+        fprintf(stderr, "myshell: syntax error: command missing\n");
+        return -1;
+    }
+    cmd->argv[argc] = NULL;
+    return ncmds + 1;
 }
 
 // ---------------- built-in commands ----------------

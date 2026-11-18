@@ -1,5 +1,35 @@
 #include "shell.h"
 
+// ---------------- command history ----------------
+// A circular array: command number k (1, 2, 3, ...) is stored at index (k-1) % HISTORY_SIZE.
+// When more than HISTORY_SIZE commands are typed, the oldest one is overwritten.
+static char* history[HISTORY_SIZE];
+static int history_count = 0;          // total commands added so far
+
+void add_to_history(const char* cmdline) {
+    // do not store a line that is empty or only spaces/tabs
+    if (cmdline[strspn(cmdline, " \t")] == '\0') return;
+
+    int index = history_count % HISTORY_SIZE;
+    free(history[index]);              // free the oldest command (NULL the first time round)
+    history[index] = strdup(cmdline);  // strdup = malloc + strcpy
+    history_count++;
+}
+
+// Returns a malloc'd copy of command number n, or NULL if it is not in the history.
+char* get_history(int n) {
+    int oldest = (history_count > HISTORY_SIZE) ? history_count - HISTORY_SIZE + 1 : 1;
+    if (n < oldest || n > history_count) return NULL;
+    return strdup(history[(n - 1) % HISTORY_SIZE]);
+}
+
+static void show_history(void) {
+    int oldest = (history_count > HISTORY_SIZE) ? history_count - HISTORY_SIZE + 1 : 1;
+    for (int n = oldest; n <= history_count; n++)
+        printf("%5d  %s\n", n, history[(n - 1) % HISTORY_SIZE]);
+}
+
+// ---------------- reading and tokenizing ----------------
 char* read_cmd(char* prompt, FILE* fp) {
     printf("%s", prompt);
     fflush(stdout);   // show the prompt now; an unflushed buffer would also be copied into every forked child
@@ -16,7 +46,7 @@ char* read_cmd(char* prompt, FILE* fp) {
         free(cmdline);
         return NULL; // Handle Ctrl+D
     }
-    
+
     cmdline[pos] = '\0';
     return cmdline;
 }
@@ -36,7 +66,7 @@ char** tokenize(char* cmdline) {
 
     while (*cp != '\0' && argnum < MAXARGS) {
         while (*cp == ' ' || *cp == '\t') cp++; // Skip leading whitespace
-        
+
         if (*cp == '\0') break; // Line was only whitespace
 
         start = cp;
@@ -60,6 +90,7 @@ char** tokenize(char* cmdline) {
     return arglist;
 }
 
+// ---------------- built-in commands ----------------
 // Runs a built-in command inside the shell process.
 // Returns 1 if arglist[0] is a built-in (it has been executed), 0 otherwise.
 int handle_builtin(char** arglist) {
@@ -85,7 +116,13 @@ int handle_builtin(char** arglist) {
         printf("  cd <dir>   change the current directory\n");
         printf("  exit [n]   leave the shell\n");
         printf("  help       show this message\n");
+        printf("  history    show the last %d commands (!n re-runs command n)\n", HISTORY_SIZE);
         printf("  jobs       list background jobs\n");
+        return 1;
+    }
+
+    if (strcmp(arglist[0], "history") == 0) {
+        show_history();
         return 1;
     }
 

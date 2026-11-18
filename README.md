@@ -23,3 +23,4 @@ make clean      # removes obj/*.o and bin/myshell
 |---|---|
 | v1.0-base | Base shell (starter code): runs external commands with fork-exec-wait |
 | v2 | Built-in commands: `cd`, `exit`, `help`, `jobs` |
+| v3 | Command history: `history` and `!n` (last 20 commands) |

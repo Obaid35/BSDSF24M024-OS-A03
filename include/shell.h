@@ -12,11 +12,14 @@
 #define MAX_LEN 512
 #define MAXARGS 10
 #define PROMPT "FCIT> "
+#define HISTORY_SIZE 20   // how many recent commands are remembered
 
 // Function prototypes
 char* read_cmd(char* prompt, FILE* fp);
 char** tokenize(char* cmdline);
 int execute(char** arglist);
 int handle_builtin(char** arglist);   // returns 1 if arglist[0] was a built-in (and ran it), else 0
+void add_to_history(const char* cmdline);
+char* get_history(int n);             // copy of command number n, or NULL if n is out of range
 
 #endif // SHELL_H

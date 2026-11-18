@@ -95,11 +95,12 @@ void init_completion(void) {
 
 // characters that are a token of their own even without spaces: "ls>out" = ls  >  out
 static int is_special(char c) {
-    return c == '<' || c == '>' || c == '|';
+    return c == '<' || c == '>' || c == '|' || c == ';' || c == '&';
 }
 
 static int is_operator(const char* tok) {
-    return strcmp(tok, "<") == 0 || strcmp(tok, ">") == 0 || strcmp(tok, "|") == 0;
+    return strcmp(tok, "<") == 0 || strcmp(tok, ">") == 0 || strcmp(tok, "|") == 0
+        || strcmp(tok, ";") == 0 || strcmp(tok, "&") == 0;
 }
 
 // Splits the line into words and operators. Text inside "..." or '...' stays one word
@@ -120,7 +121,7 @@ char** tokenize(char* cmdline) {
         }
 
         int len = 0;
-        if (is_special(*cp)) {                         // an operator: < > |
+        if (is_special(*cp)) {                         // an operator: < > | ; &
             word[len++] = *cp++;
         } else {                                       // a normal word
             char quote = 0;                            // 0, or the quote we are inside
@@ -236,7 +237,7 @@ int handle_builtin(char** arglist) {
         printf("  exit [n]   leave the shell\n");
         printf("  help       show this message\n");
         printf("  history    show the last %d commands (!n re-runs command n)\n", HISTORY_SIZE);
-        printf("  jobs       list background jobs\n");
+        printf("  jobs       list background jobs (start one with: command &)\n");
         return 1;
     }
 
@@ -246,7 +247,7 @@ int handle_builtin(char** arglist) {
     }
 
     if (strcmp(arglist[0], "jobs") == 0) {
-        printf("Job control not yet implemented.\n");
+        print_jobs();
         return 1;
     }
 
